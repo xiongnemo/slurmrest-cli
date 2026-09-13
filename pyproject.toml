@@ -1,0 +1,46 @@
+[project]
+name = "slurmrest-cli"
+version = "0.1.0"
+description = "A friendly command-line client for the Slurm REST API (slurmrestd)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Nemo Xiong" }]
+keywords = ["slurm", "hpc", "rest", "cli", "slurmrestd"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Clustering",
+    "Topic :: System :: Distributed Computing",
+]
+dependencies = [
+    "httpx>=0.27",
+    "typer>=0.12",
+    "rich>=13.7",
+]
+
+[project.urls]
+Homepage = "https://github.com/xiongnemo/slurmrest-cli"
+Issues = "https://github.com/xiongnemo/slurmrest-cli/issues"
+
+[project.scripts]
+srest = "slurmrest.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/slurmrest"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
