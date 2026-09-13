@@ -8,6 +8,7 @@ can read in a terminal.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from rich.console import Console
@@ -99,23 +100,105 @@ def _secs(value: Any) -> str:
     return f"{h:d}:{m:02d}:{sec:02d}"
 
 
-def table(title: str, columns: list[str]) -> Table:
-    t = Table(title=title, header_style="bold", title_justify="left", expand=False)
+def table(title: str, columns: list[str], nowrap: tuple[str, ...] = ()) -> Table:
+    """Build a table. Columns listed in *nowrap* never get folded mid-word.
+
+    Identifiers (node names, job IDs) are unreadable when wrapped, so they are
+    kept whole and the table is allowed to be wider than the terminal instead.
+    """
+    t = Table(title=title, header_style="bold", title_justify="left", expand=False, pad_edge=False)
     for c in columns:
-        t.add_column(c, overflow="fold")
+        if c in nowrap:
+            t.add_column(c, no_wrap=True, overflow="ignore")
+        else:
+            t.add_column(c, overflow="fold")
     return t
 
 
+def parse_gres(spec: Any) -> tuple[int, str, str]:
+    """Parse a GRES string.
+
+    ``gpu:a100:4``            -> (4, "gpu:a100", "")
+    ``gpu:a100:2(IDX:0-1)``   -> (2, "gpu:a100", "0-1")
+    ``gpu:0(IDX:N/A)``        -> (0, "gpu", "")
+    """
+    text = str(spec or "").strip()
+    if not text or text in {"N/A", "(null)"}:
+        return 0, "", ""
+    idx = ""
+    m = re.search(r"\(IDX:([^)]*)\)", text)
+    if m:
+        idx = "" if m.group(1) in {"N/A", ""} else m.group(1)
+        text = text[: m.start()]
+    parts = text.split(":")
+    count = 0
+    if parts and parts[-1].isdigit():
+        count = int(parts[-1])
+        parts = parts[:-1]
+    return count, ":".join(parts), idx
+
+
+def _pct_style(used: float, total: float) -> str:
+    if total <= 0:
+        return "white"
+    frac = used / total
+    if frac >= 1.0:
+        return "red"
+    if frac > 0:
+        return "yellow"
+    return "green"
+
+
+def _ratio(used: Any, total: Any, unit: str = "") -> str:
+    u, tt = _flat(used), _flat(total)
+    if not tt:
+        return ""
+    try:
+        style = _pct_style(float(u or 0), float(tt))
+    except ValueError:
+        style = "white"
+    return f"[{style}]{u or 0}[/{style}]/{tt}{unit}"
+
+
 def nodes_table(nodes: list[dict]) -> Table:
-    t = table(f"Nodes ({len(nodes)})", ["NAME", "STATE", "CPUS", "MEMORY", "GRES", "REASON"])
+    """A `bhosts`-shaped view: what each node has, and how much is in use."""
+    t = table(
+        f"Nodes ({len(nodes)})",
+        ["NAME", "STATE", "GPUS", "IDX", "CPUS", "MEM(GB)", "LOAD", "PART", "REASON"],
+        nowrap=("NAME", "STATE", "GPUS", "IDX", "CPUS", "MEM(GB)", "LOAD"),
+    )
     for n in nodes:
-        mem = _flat(n.get("real_memory"))
+        total_g, kind, _ = parse_gres(n.get("gres"))
+        used_g, _, idx = parse_gres(n.get("gres_used"))
+        gpus = ""
+        if total_g:
+            style = _pct_style(used_g, total_g)
+            label = kind.replace("gpu:", "") if kind.startswith("gpu:") else kind
+            gpus = f"[{style}]{used_g}[/{style}]/{total_g}" + (f" {label}" if label else "")
+
+        real = _flat(n.get("real_memory"))
+        alloc = _flat(n.get("alloc_memory"))
+        mem = ""
+        if real:
+            mem = _ratio(
+                round(int(alloc or 0) / 1024) if alloc.isdigit() else 0,
+                round(int(real) / 1024),
+            )
+
+        state = _flat(n.get("state"))
+        state_style = "green" if "IDLE" in state else "yellow" if "MIX" in state else (
+            "red" if any(x in state for x in ("DOWN", "DRAIN", "FAIL")) else "white"
+        )
+
         t.add_row(
             str(n.get("name", "")),
-            _flat(n.get("state")),
-            f"{_flat(n.get('alloc_cpus'))}/{_flat(n.get('cpus'))}",
-            f"{mem} MB" if mem else "",
-            str(n.get("gres") or ""),
+            f"[{state_style}]{state}[/{state_style}]",
+            gpus,
+            idx,
+            _ratio(n.get("alloc_cpus"), n.get("cpus")),
+            mem,
+            _flat(n.get("cpu_load")),
+            ",".join(n.get("partitions") or []),
             str(n.get("reason") or ""),
         )
     return t
@@ -137,6 +220,7 @@ def jobs_table(jobs: list[dict], title: str = "Jobs") -> Table:
     t = table(
         f"{title} ({len(jobs)})",
         ["JOBID", "NAME", "USER", "STATE", "NODES", "GPUS", "ELAPSED", "REASON"],
+        nowrap=("JOBID", "USER", "STATE", "NODES", "GPUS", "ELAPSED"),
     )
     for j in jobs:
         alloc = (j.get("job_resources") or {}).get("allocated_nodes")
@@ -165,6 +249,7 @@ def acct_table(jobs: list[dict]) -> Table:
     t = table(
         f"Accounting ({len(jobs)})",
         ["JOBID", "NAME", "STATE", "ELAPSED", "NODES", "GPUS", "ALLOC", "EXIT"],
+        nowrap=("JOBID", "STATE", "ELAPSED", "NODES", "GPUS", "EXIT"),
     )
     for j in jobs:
         exit_code = (j.get("exit_code") or {}).get("return_code")

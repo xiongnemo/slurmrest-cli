@@ -103,6 +103,51 @@ def ping() -> None:
     _run(go)
 
 
+@app.command(name="status")
+def status() -> None:
+    """One-screen overview: controller, nodes, GPUs and queue."""
+
+    def go(c: Client):
+        from collections import Counter
+
+        pings = c.ping().get("pings") or []
+        nodes = c.nodes()
+        jobs = c.jobs()
+
+        if _state["json"]:
+            return format.dump_json({"pings": pings, "nodes": nodes, "jobs": jobs})
+
+        for p in pings:
+            ok = p.get("responding") or p.get("pinged") == "UP"
+            mark = "[green]up[/green]" if ok else "[red]down[/red]"
+            format.console.print(f"controller {p.get('hostname', '?')}: {mark}")
+
+        states = Counter()
+        gpu_used = gpu_total = 0
+        for n in nodes:
+            states[format._flat(n.get("state")).split(",")[0]] += 1
+            total, _, _ = format.parse_gres(n.get("gres"))
+            used, _, _ = format.parse_gres(n.get("gres_used"))
+            gpu_total += total
+            gpu_used += used
+        breakdown = "  ".join(f"{k.lower()}={v}" for k, v in sorted(states.items()))
+        format.console.print(f"nodes      {len(nodes)} total   {breakdown}")
+        if gpu_total:
+            style = format._pct_style(gpu_used, gpu_total)
+            pct = 100 * gpu_used / gpu_total
+            format.console.print(
+                f"gpus       [{style}]{gpu_used}/{gpu_total}[/{style}] in use ({pct:.0f}%)"
+            )
+
+        jstates = Counter(format._flat(j.get("job_state")).split(",")[0] for j in jobs)
+        summary = "  ".join(f"{k.lower()}={v}" for k, v in sorted(jstates.items())) or "empty"
+        format.console.print(f"queue      {len(jobs)} job(s)   {summary}")
+        format.console.print()
+        format.console.print(format.nodes_table(nodes))
+
+    _run(go)
+
+
 @app.command(name="nodes")
 def nodes(
     state: Annotated[str | None, typer.Option("--state", "-s", help="Filter by state substring, e.g. IDLE.")] = None,

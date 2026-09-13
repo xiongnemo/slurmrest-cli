@@ -6,19 +6,25 @@ HTTP + JWT, so you can drive a cluster from anywhere you can reach the API —
 no Slurm client install, no shared MUNGE key, no SSH hop.
 
 ```console
-$ srest nodes
-                    Nodes (4)
-┏━━━━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━┓
-┃ NAME     ┃ STATE ┃ CPUS  ┃ MEMORY    ┃ GRES      ┃ REASON ┃
-┡━━━━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━┩
-│ node-01  │ IDLE  │ 0/64  │ 500000 MB │ gpu:a100:4│        │
-│ node-02  │ MIXED │ 32/64 │ 500000 MB │ gpu:a100:4│        │
-└──────────┴───────┴───────┴───────────┴───────────┴────────┘
+$ srest status
+controller head-01: up
+nodes      4 total   idle=3  allocated=1
+gpus       4/16 in use (25%)
+queue      1 job(s)   running=1
+
+Nodes (4)
++--------------------------------------------------------------------------------+
+|NAME     | STATE     | GPUS     | IDX | CPUS  | MEM(GB) | LOAD | PART | REASON  |
+|---------+-----------+----------+-----+-------+---------+------+------+---------|
+|node-01  | IDLE      | 0/4 a100 |     | 0/64  | 0/488   | 3    | gpu  |         |
+|node-02  | ALLOCATED | 4/4 a100 | 0-3 | 64/64 | 488/488 | 2    | gpu  |         |
++--------------------------------------------------------------------------------+
 
 $ srest submit train.sbatch --gres gres/gpu:4 --time 120 --wait
 Submitted batch job 1234
 Job 1234 finished: COMPLETED
 ```
+
 
 ## Why
 
@@ -96,8 +102,9 @@ srest -H "X-Gateway-Id: abc" -H "X-Gateway-Secret: xyz" jobs
 
 | Command | Classic equivalent |
 | --- | --- |
-| `srest ping` | `scontrol ping` |
-| `srest nodes [--state IDLE]` | `sinfo -N` |
+| `srest status` | — (an at-a-glance overview; closest to `bhosts`) |
+| `srest ping` | `scontrol ping` — the **controller**, not the compute nodes |
+| `srest nodes [--state IDLE]` | `sinfo -N` — GPUs used/total, allocated indices, load |
 | `srest partitions` | `sinfo` |
 | `srest jobs [--user U] [--state RUNNING]` | `squeue` |
 | `srest job <id>` | `scontrol show job` |
