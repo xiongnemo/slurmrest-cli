@@ -151,6 +151,11 @@ These bit us; they are properties of `slurmrestd`, not of this client.
   the JWT settings are usually missing from `slurmdbd.conf`.
 - **API versions are negotiated**, not assumed. `srest version` shows what the
   server offers; the newest is used unless you pin `--api-version`.
+- **`LOAD` is the host's load average, not the Slurm node's.** Slurm sends
+  `cpu_load` as the 1-minute load average multiplied by 100 (so `5` means
+  `0.05`); this client scales it back. If several Slurm nodes are carved out of
+  one physical machine they will all report the same figure, because they share
+  `/proc/loadavg`.
 
 ## License
 

@@ -100,6 +100,19 @@ def _secs(value: Any) -> str:
     return f"{h:d}:{m:02d}:{sec:02d}"
 
 
+def _cpu_load(value: Any) -> str:
+    """Slurm reports ``cpu_load`` as the 1-minute load average times 100.
+
+    Printing the raw integer makes a load of 0.05 look like 5, so scale it back.
+    Note this is the *host's* load: if several Slurm nodes are carved out of one
+    machine they all report the same figure, since they share /proc/loadavg.
+    """
+    raw = _flat(value)
+    if not raw or not raw.lstrip("-").isdigit():
+        return raw
+    return f"{int(raw) / 100:.2f}"
+
+
 def table(title: str, columns: list[str], nowrap: tuple[str, ...] = ()) -> Table:
     """Build a table. Columns listed in *nowrap* never get folded mid-word.
 
@@ -197,7 +210,7 @@ def nodes_table(nodes: list[dict]) -> Table:
             idx,
             _ratio(n.get("alloc_cpus"), n.get("cpus")),
             mem,
-            _flat(n.get("cpu_load")),
+            _cpu_load(n.get("cpu_load")),
             ",".join(n.get("partitions") or []),
             str(n.get("reason") or ""),
         )

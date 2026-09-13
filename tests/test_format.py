@@ -80,3 +80,11 @@ def test_jobs_table_quiet_when_request_matches():
     ]
     cells = [c for col in fmt.jobs_table(jobs).columns for c in col._cells]
     assert not any("req" in str(c) for c in cells)
+
+
+def test_cpu_load_is_scaled_back_from_slurms_integer():
+    """Slurm sends load average * 100; 5 means 0.05, not 5."""
+    assert fmt._cpu_load(5) == "0.05"
+    assert fmt._cpu_load(1) == "0.01"
+    assert fmt._cpu_load(250) == "2.50"
+    assert fmt._cpu_load(None) == ""

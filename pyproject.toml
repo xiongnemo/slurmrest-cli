@@ -1,6 +1,6 @@
 [project]
 name = "slurmrest-cli"
-version = "0.3.0"
+version = "0.3.1"
 description = "A friendly command-line client for the Slurm REST API (slurmrestd)"
 readme = "README.md"
 requires-python = ">=3.10"
